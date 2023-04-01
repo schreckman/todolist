@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
+# python3 -m pip install -U nuitka
 # py to exe: python3 -m nuitka todolist
+import argparse
+from colorama import Fore  # pip3 install colorama
 import datetime
 import sqlite3 as sl
-import argparse
-from colorama import Fore
+from tabulate import tabulate  # pip3 install tabulate
 
 
 class TodoList:
 
-    def __init__(self):
-        # constructor
-        pass
+    def __init__(self, database):
+        self.con = sl.connect(database)
 
-    @staticmethod
-    def addTable():
+    def __del__(self):
+        self.con.close()
+
+    def addTable(self):
         # create a cursor object
-        cursor = con.cursor()
+        cursor = self.con.cursor()
 
         # execute a PRAGMA statement to query the table names in the database
         cursor.execute("PRAGMA table_info(TODO)")
@@ -24,12 +27,9 @@ class TodoList:
         table_info = cursor.fetchall()
 
         # check if the table exists by checking if any results were returned by the PRAGMA statement
-        if len(table_info) > 0:
-            print("The table exists!")
-        else:
-            print("The table does not exist.")
-            with con:
-                con.execute("""
+        if len(table_info) == 0:
+            with self.con:
+                self.con.execute("""
                     CREATE TABLE TODO (
                         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                         text TEXT,
@@ -42,56 +42,106 @@ class TodoList:
         # close the cursor and database connection
         cursor.close()
 
-    @staticmethod
-    def addRowsToTODO(todo: str, prio: int):
+    def addRows(self, todo: str, prio: int):
         # adds row to db
         sql = 'INSERT INTO TODO (text, added, closed, priority) values(?, ?, ?, ?)'
         data = [(todo, datetime.datetime.now(), 'NULL', prio)]
 
-        with con:
-            con.executemany(sql, data)  # führt den SQL befehl aus
+        with self.con:
+            self.con.executemany(sql, data)  # führt den SQL befehl aus
 
-    @staticmethod
-    def listRowsFromTODO():
+    def listRows(self):
         # lists the values in db
-        with con:
-            data = con.execute("SELECT * FROM TODO")
-            for row in data:
-                print(row)
+        with self.con:
+            data = self.con.execute("SELECT * FROM TODO")
+            names = list(map(lambda x: x[0], data.description))
+            query_result = list(data)
+
+            query_result.insert(0, names)
+
+            return tabulate(query_result).split("\n")
+
+    def list(self):
+        data = self.con.execute("SELECT id, text FROM TODO")
+        names = list(map(lambda x: x[0], data.description))
+        query_result = list(data)
+
+        query_result.insert(0, names)
+
+        return tabulate(query_result).split("\n")
+
+    def updateValue(self, id: int):
+        str_now = datetime.datetime.now().isoformat()
+        sql = """Update TODO set closed = ? where id = ?"""
+        data = (str_now, id)
+        self.con.execute(sql, data)
+        self.con.commit()
+
+    def removeRow(self, id: int):
+        sql = """DELETE from TODO where id = ?"""
+        data = [id]
+        self.con.execute(sql, data)
+        self.con.commit()
+
+    def resetTable(self):
+        # DROP TABLE table_name;
+        self.con.execute("""
+            DROP TABLE TODO;
+        """)
+        self.addTable()
+
+    def sortQueryResult(self, category: str):
+        if category == "priority":
+            data = self.con.execute("""
+            Select * from TODO order by priority desc
+            """)
+            self.con.commit()
+            names = list(map(lambda x: x[0], data.description))
+            query_result = list(data)
+
+            query_result.insert(0, names)
+
+            query_result_list = tabulate(query_result).split("\n")
+            for text in query_result_list:
+                if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
+                    print(Fore.RESET, text)
+                else:
+                    print(Fore.GREEN, text)
+
+        if category == "completed":
+            query_result_list = self.listRows()
+            for text in query_result_list:
+                if not text.__contains__("NULL"):
+                    print(text)
+
+        if category == "uncompleted":
+            query_result_list = self.listRows()
+            for text in query_result_list:
+                if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
+                    print(text)
 
 
 parser = argparse.ArgumentParser(description="TODO list by Manuel Schreck")
 
 parser.add_argument("-a", "--add", help="add todolist", required=False, action="store_true")
 parser.add_argument("-l", "--list", help="list the todos", required=False, action="store_true")
-parser.add_argument("-d", "--done", help="mark a todo as done", required=False, action="store_true")
-parser.add_argument("-r", "--remove", help="removes a todo from the list", required=False)
+parser.add_argument("-d", "--done", help="mark a todo as done, needs the id", required=False)
+parser.add_argument("-r", "--remove", help="removes a todo from the list, needs the id", required=False)
 parser.add_argument("-x", "--reset", help="deletes all todos", required=False, action="store_true")
-parser.add_argument("-s", "--sort", help="sorts completed and uncompleted tasks", required=False, action="store_true")
-parser.add_argument("-w", "--raw", help="prints nothing but done/incompleted tasks in plain text, useful for scripting",
-                    required=False)
-parser.add_argument("-sp", "--sortpriority", help="lists the todos after the priority: low/high", required=False)
+parser.add_argument("-s", "--sort", help="sorts for completed/uncompleted or priority tasks", required=False, choices=["completed", "priority", "uncompleted"])
+
 parser.add_argument("-t", "--todo", help="set the name of the todo, use after --add, --done", required=False)
 parser.add_argument("-p", "--priority", help="set the priority of the todo, use after --add. --done", required=False)
 
 args = parser.parse_args()
-con = sl.connect('todo.db')
-
-print("add:", args.add)
-print("list:", args.list)
-print("done:", args.done)
-print("remove:", args.remove)
-print("reset:", args.reset)
-print("sort:", args.sort)
-print("raw:", args.raw)
-print("sort priority:", args.sortpriority)
-print("todo:", args.todo)
-print("priority:", args.priority)
 
 text = args.todo
 prio = args.priority
+id_done = args.done
+id_remove = args.remove
+sort = args.sort
 
-todolist = TodoList
+todolist = TodoList('todo.db')
 todolist.addTable()
 
 if args.add:
@@ -100,11 +150,32 @@ if args.add:
         exit(0)
     if args.priority is None:
         args.priority = 0
-    print(str(todolist))
-    todolist.addRowsToTODO(str(text), int(prio))
+    todolist.addRows(text, prio)
+    exit(0)
 
+if args.list:
+    query_result_list = todolist.list()
+    for text in query_result_list:
+        print(text)
+    #for text in query_result_list:
+    #    if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
+    #        print(Fore.RESET, text)
+    #    else:
+    #        print(Fore.GREEN, text)
+    exit(0)
 
-# todolist.addRowsToTODO()
-todolist.listRowsFromTODO()
+if args.done:
+    todolist.updateValue(id_done)
+    exit(0)
 
-# program argumente einlesen und analysieren -> task bearbeiten -> beenden
+if args.remove:
+    todolist.removeRow(id_remove)
+    exit(0)
+
+if args.reset:
+    todolist.resetTable()
+    exit(0)
+
+if args.sort:
+    todolist.sortQueryResult(sort)
+    exit(0)

@@ -1,19 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# py to exe: python3 -m nuitka todolist
 import datetime
 import sqlite3 as sl
 import argparse
-
-parser = argparse.ArgumentParser(description="TODO list by Manuel Schreck")
-
-parser.add_argument("-l", "--list", help="list the todos", required=False)
-parser.add_argument("-a", "--add", help="add todolist", required=False)
-
-args = parser.parse_args()
-
-con = sl.connect('todo.db')
+from colorama import Fore
 
 
-class TODO:
+class TodoList:
 
     def __init__(self):
         # constructor
@@ -50,14 +43,11 @@ class TODO:
         cursor.close()
 
     @staticmethod
-    def addRowsToTODO():
+    def addRowsToTODO(todo: str, prio: int):
         # adds row to db
         sql = 'INSERT INTO TODO (text, added, closed, priority) values(?, ?, ?, ?)'
-        data = [
-            ('banane', datetime.datetime.now(), 'NULL', 1),
-            ('apfel', datetime.datetime.now(), 'NULL', 5),
-            ('müll', datetime.datetime.now(), 'NULL', 2)
-        ]
+        data = [(todo, datetime.datetime.now(), 'NULL', prio)]
+
         with con:
             con.executemany(sql, data)  # führt den SQL befehl aus
 
@@ -70,41 +60,51 @@ class TODO:
                 print(row)
 
 
-todo = TODO
+parser = argparse.ArgumentParser(description="TODO list by Manuel Schreck")
 
-todo.addTable()
+parser.add_argument("-a", "--add", help="add todolist", required=False, action="store_true")
+parser.add_argument("-l", "--list", help="list the todos", required=False, action="store_true")
+parser.add_argument("-d", "--done", help="mark a todo as done", required=False, action="store_true")
+parser.add_argument("-r", "--remove", help="removes a todo from the list", required=False)
+parser.add_argument("-x", "--reset", help="deletes all todos", required=False, action="store_true")
+parser.add_argument("-s", "--sort", help="sorts completed and uncompleted tasks", required=False, action="store_true")
+parser.add_argument("-w", "--raw", help="prints nothing but done/incompleted tasks in plain text, useful for scripting",
+                    required=False)
+parser.add_argument("-sp", "--sortpriority", help="lists the todos after the priority: low/high", required=False)
+parser.add_argument("-t", "--todo", help="set the name of the todo, use after --add, --done", required=False)
+parser.add_argument("-p", "--priority", help="set the priority of the todo, use after --add. --done", required=False)
+
+args = parser.parse_args()
+con = sl.connect('todo.db')
+
+print("add:", args.add)
+print("list:", args.list)
+print("done:", args.done)
+print("remove:", args.remove)
+print("reset:", args.reset)
+print("sort:", args.sort)
+print("raw:", args.raw)
+print("sort priority:", args.sortpriority)
+print("todo:", args.todo)
+print("priority:", args.priority)
+
+text = args.todo
+prio = args.priority
+
+todolist = TodoList
+todolist.addTable()
+
+if args.add:
+    if args.todo is None:
+        print(Fore.RED + "You have to add the --todo argument to --add")
+        exit(0)
+    if args.priority is None:
+        args.priority = 0
+    print(str(todolist))
+    todolist.addRowsToTODO(str(text), int(prio))
+
+
 # todolist.addRowsToTODO()
-todo.listRowsFromTODO()
-
-print("test")
-
-# datenbank erstellen wenn nicht vorhanden
-
-# datenbank öffnen und list auslesen
+todolist.listRowsFromTODO()
 
 # program argumente einlesen und analysieren -> task bearbeiten -> beenden
-
-# tasks ->
-'''
-Available commands:
-    - add [TASK/s]
-        adds new task/s
-        Example: todolist add "buy carrots"
-    - list
-        lists all tasks
-        Example: todolist list
-    - done [INDEX]
-        marks task as done
-        Example: todolist done 2 3 (marks second and third tasks as completed)
-    - rm [INDEX]
-        removes a task
-        Example: todolist rm 4
-    - reset
-        deletes all tasks
-    - sort
-        sorts completed and uncompleted tasks
-        Example: todolist sort
-    - raw [todolist/done]
-        prints nothing but done/incompleted tasks in plain text, useful for scripting
-        Example: todolist raw done
-'''

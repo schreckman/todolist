@@ -1,0 +1,110 @@
+#!/usr/bin/env python
+import datetime
+import sqlite3 as sl
+import argparse
+
+parser = argparse.ArgumentParser(description="TODO list by Manuel Schreck")
+
+parser.add_argument("-l", "--list", help="list the todos", required=False)
+parser.add_argument("-a", "--add", help="add todolist", required=False)
+
+args = parser.parse_args()
+
+con = sl.connect('todo.db')
+
+
+class TODO:
+
+    def __init__(self):
+        # constructor
+        pass
+
+    @staticmethod
+    def addTable():
+        # create a cursor object
+        cursor = con.cursor()
+
+        # execute a PRAGMA statement to query the table names in the database
+        cursor.execute("PRAGMA table_info(TODO)")
+
+        # fetch the results of the PRAGMA statement
+        table_info = cursor.fetchall()
+
+        # check if the table exists by checking if any results were returned by the PRAGMA statement
+        if len(table_info) > 0:
+            print("The table exists!")
+        else:
+            print("The table does not exist.")
+            with con:
+                con.execute("""
+                    CREATE TABLE TODO (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        text TEXT,
+                        added TIMESTAMP,
+                        closed TIMESTAMP,
+                        priority TINYINT
+                    );
+                """)
+
+        # close the cursor and database connection
+        cursor.close()
+
+    @staticmethod
+    def addRowsToTODO():
+        # adds row to db
+        sql = 'INSERT INTO TODO (text, added, closed, priority) values(?, ?, ?, ?)'
+        data = [
+            ('banane', datetime.datetime.now(), 'NULL', 1),
+            ('apfel', datetime.datetime.now(), 'NULL', 5),
+            ('müll', datetime.datetime.now(), 'NULL', 2)
+        ]
+        with con:
+            con.executemany(sql, data)  # führt den SQL befehl aus
+
+    @staticmethod
+    def listRowsFromTODO():
+        # lists the values in db
+        with con:
+            data = con.execute("SELECT * FROM TODO")
+            for row in data:
+                print(row)
+
+
+todo = TODO
+
+todo.addTable()
+# todolist.addRowsToTODO()
+todo.listRowsFromTODO()
+
+print("test")
+
+# datenbank erstellen wenn nicht vorhanden
+
+# datenbank öffnen und list auslesen
+
+# program argumente einlesen und analysieren -> task bearbeiten -> beenden
+
+# tasks ->
+'''
+Available commands:
+    - add [TASK/s]
+        adds new task/s
+        Example: todolist add "buy carrots"
+    - list
+        lists all tasks
+        Example: todolist list
+    - done [INDEX]
+        marks task as done
+        Example: todolist done 2 3 (marks second and third tasks as completed)
+    - rm [INDEX]
+        removes a task
+        Example: todolist rm 4
+    - reset
+        deletes all tasks
+    - sort
+        sorts completed and uncompleted tasks
+        Example: todolist sort
+    - raw [todolist/done]
+        prints nothing but done/incompleted tasks in plain text, useful for scripting
+        Example: todolist raw done
+'''

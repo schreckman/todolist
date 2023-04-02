@@ -6,6 +6,21 @@ from colorama import Fore  # pip3 install colorama
 import datetime
 import sqlite3 as sl
 from tabulate import tabulate  # pip3 install tabulate
+from termcolor import colored  # pip3 install termcolor
+
+
+def strikethrough(mytext):
+    ''' replacing space with 'non-break space' and striking through'''
+    return "\u0336".join(mytext.replace(" ", "\u00a0")) + "\u0336"
+
+
+class Todo:
+    def __init__(self, id: int, text: str, added: str, closed: str, prio: int):
+        self.id = id
+        self.text = text
+        self.added = added
+        self.closed = closed
+        self.priority = prio
 
 
 class TodoList:
@@ -61,14 +76,32 @@ class TodoList:
 
             return tabulate(query_result).split("\n")
 
+    def selectOrderBy(self, order, sequence):
+        with self.con:
+            sql = f"""select * from TODO order by {order} {sequence}"""
+            data = self.con.execute(sql)
+            records = data.fetchall()
+            self.con.commit()
+            list = []
+            for row in records:
+                todo = Todo(row[0], row[1], row[2], row[3], row[4])
+                list.append(todo)
+            return list
+
     def list(self):
-        data = self.con.execute("SELECT id, text FROM TODO")
-        names = list(map(lambda x: x[0], data.description))
-        query_result = list(data)
-
-        query_result.insert(0, names)
-
-        return tabulate(query_result).split("\n")
+        list = self.readTableIntoClass()
+        ret = [colored(str("id"), None, None, ["bold", "underline"]),
+               colored(str("text"), None, None, ["bold", "underline"]),
+               colored(str("finished ?"), None, None, ["bold", "underline"])]
+        retList = [ret]
+        for i in list:
+            if i.closed == "NULL":
+                retList.append([str(i.id), i.text, ""])
+            else:
+                retList.append([colored(str(i.id), None, None, ["bold", "dark"]),
+                                colored(str(i.text), None, None, ["bold", "dark"]),
+                                colored("done", None, None, ["bold", "dark"])])
+        return tabulate(retList)
 
     def updateValue(self, id: int):
         str_now = datetime.datetime.now().isoformat()
@@ -92,33 +125,52 @@ class TodoList:
 
     def sortQueryResult(self, category: str):
         if category == "priority":
-            data = self.con.execute("""
-            Select * from TODO order by priority desc
-            """)
-            self.con.commit()
-            names = list(map(lambda x: x[0], data.description))
-            query_result = list(data)
-
-            query_result.insert(0, names)
-
-            query_result_list = tabulate(query_result).split("\n")
-            for text in query_result_list:
-                if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
-                    print(Fore.RESET, text)
+            list = self.readTableIntoClass()
+            ret = [colored(str("id"), None, None, ["bold", "underline"]),
+                   colored(str("text"), None, None, ["bold", "underline"]),
+                   colored(str("finished ?"), None, None, ["bold", "underline"])]
+            retList = [ret]
+            for i in list:
+                if i.closed == "NULL":
+                    retList.append([str(i.id), i.text, ""])
                 else:
-                    print(Fore.GREEN, text)
+                    retList.append([colored(str(i.id), None, None, ["bold", "dark"]),
+                                    colored(str(i.text), None, None, ["bold", "dark"]),
+                                    colored("done", None, None, ["bold", "dark"])])
+            return tabulate(retList)
 
-        if category == "completed":
-            query_result_list = self.listRows()
-            for text in query_result_list:
-                if not text.__contains__("NULL"):
-                    print(text)
+        #if category == "completed":
+        #    data = self.selectOrderBy("closed", "desc")
+        #    names = list(map(lambda x: x[0], data.description))
+        #    query_result = list(data)
 
-        if category == "uncompleted":
-            query_result_list = self.listRows()
-            for text in query_result_list:
-                if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
-                    print(text)
+        #    query_result.insert(0, names)
+        #    for text in tabulate(query_result).split("\n"):
+        #        if not text.__contains__("NULL"):
+        #            print(text)
+
+    def readTableIntoClass(self):
+        sql = """SELECT * from TODO"""
+        data = self.con.execute(sql)
+        records = data.fetchall()
+        list = []
+        for row in records:
+            todo = Todo(row[0], row[1], row[2], row[3], row[4])
+            list.append(todo)
+        return list
+
+    def writeClassInfoTable(self, todo):
+        sql = 'INSERT INTO TODO (text, added, closed, priority) values(?, ?, ?, ?)'
+        data = [(todo.text, todo.added, todo.closed, todo.priority)]
+
+        with self.con:
+            self.con.executemany(sql, data)  # führt den SQL befehl aus
+
+    def reshuffle(self):
+        list = self.readTableIntoClass()
+        self.resetTable()
+        for todo in list:
+            self.writeClassInfoTable(todo)
 
 
 parser = argparse.ArgumentParser(description="TODO list by Manuel Schreck")
@@ -128,7 +180,10 @@ parser.add_argument("-l", "--list", help="list the todos", required=False, actio
 parser.add_argument("-d", "--done", help="mark a todo as done, needs the id", required=False)
 parser.add_argument("-r", "--remove", help="removes a todo from the list, needs the id", required=False)
 parser.add_argument("-x", "--reset", help="deletes all todos", required=False, action="store_true")
-parser.add_argument("-s", "--sort", help="sorts for completed/uncompleted or priority tasks", required=False, choices=["completed", "priority", "uncompleted"])
+parser.add_argument("-s", "--sort", help="sorts for completed or priority tasks", required=False,
+                    choices=["completed", "priority"])
+parser.add_argument("-z", "--reshuffle_in_db", help="removes blanks in the id counting", required=False,
+                    action="store_true")
 
 parser.add_argument("-t", "--todo", help="set the name of the todo, use after --add, --done", required=False)
 parser.add_argument("-p", "--priority", help="set the priority of the todo, use after --add. --done", required=False)
@@ -154,14 +209,7 @@ if args.add:
     exit(0)
 
 if args.list:
-    query_result_list = todolist.list()
-    for text in query_result_list:
-        print(text)
-    #for text in query_result_list:
-    #    if text.__contains__("NULL") or text.__contains__("-------") or text.__contains__("id"):
-    #        print(Fore.RESET, text)
-    #    else:
-    #        print(Fore.GREEN, text)
+    print(todolist.list())
     exit(0)
 
 if args.done:
@@ -178,4 +226,8 @@ if args.reset:
 
 if args.sort:
     todolist.sortQueryResult(sort)
+    exit(0)
+
+if args.reshuffle_in_db:
+    todolist.reshuffle()
     exit(0)

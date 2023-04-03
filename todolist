@@ -2,16 +2,10 @@
 # python3 -m pip install -U nuitka
 # py to exe: python3 -m nuitka todolist
 import argparse
-from colorama import Fore  # pip3 install colorama
 import datetime
 import sqlite3 as sl
 from tabulate import tabulate  # pip3 install tabulate
 from termcolor import colored  # pip3 install termcolor
-
-
-def strikethrough(mytext):
-    ''' replacing space with 'non-break space' and striking through'''
-    return "\u0336".join(mytext.replace(" ", "\u00a0")) + "\u0336"
 
 
 class Todo:
@@ -65,17 +59,6 @@ class TodoList:
         with self.con:
             self.con.executemany(sql, data)  # führt den SQL befehl aus
 
-    def listRows(self):
-        # lists the values in db
-        with self.con:
-            data = self.con.execute("SELECT * FROM TODO")
-            names = list(map(lambda x: x[0], data.description))
-            query_result = list(data)
-
-            query_result.insert(0, names)
-
-            return tabulate(query_result).split("\n")
-
     def selectOrderBy(self, order, sequence):
         with self.con:
             sql = f"""select * from TODO order by {order} {sequence}"""
@@ -90,10 +73,11 @@ class TodoList:
 
     def list(self):
         list = self.readTableIntoClass()
+
         ret = [colored(str("id"), None, None, ["bold", "underline"]),
                colored(str("text"), None, None, ["bold", "underline"]),
                colored(str("finished ?"), None, None, ["bold", "underline"])]
-        retList = [ret]
+        retList = []
         for i in list:
             if i.closed == "NULL":
                 retList.append([str(i.id), i.text, ""])
@@ -101,7 +85,7 @@ class TodoList:
                 retList.append([colored(str(i.id), None, None, ["bold", "dark"]),
                                 colored(str(i.text), None, None, ["bold", "dark"]),
                                 colored("done", None, None, ["bold", "dark"])])
-        return tabulate(retList)
+        return tabulate(retList, ret, tablefmt="pretty")
 
     def updateValue(self, id: int):
         str_now = datetime.datetime.now().isoformat()

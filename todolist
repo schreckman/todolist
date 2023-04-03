@@ -124,30 +124,10 @@ class TodoList:
         self.addTable()
 
     def sortQueryResult(self, category: str):
-        if category == "priority":
-            list = self.readTableIntoClass()
-            ret = [colored(str("id"), None, None, ["bold", "underline"]),
-                   colored(str("text"), None, None, ["bold", "underline"]),
-                   colored(str("finished ?"), None, None, ["bold", "underline"])]
-            retList = [ret]
-            for i in list:
-                if i.closed == "NULL":
-                    retList.append([str(i.id), i.text, ""])
-                else:
-                    retList.append([colored(str(i.id), None, None, ["bold", "dark"]),
-                                    colored(str(i.text), None, None, ["bold", "dark"]),
-                                    colored("done", None, None, ["bold", "dark"])])
-            return tabulate(retList)
-
-        #if category == "completed":
-        #    data = self.selectOrderBy("closed", "desc")
-        #    names = list(map(lambda x: x[0], data.description))
-        #    query_result = list(data)
-
-        #    query_result.insert(0, names)
-        #    for text in tabulate(query_result).split("\n"):
-        #        if not text.__contains__("NULL"):
-        #            print(text)
+        list = self.selectOrderBy(category, "desc")
+        self.resetTable()
+        for todo in list:
+            self.writeClassInfoTable(todo)
 
     def readTableIntoClass(self):
         sql = """SELECT * from TODO"""
@@ -180,8 +160,8 @@ parser.add_argument("-l", "--list", help="list the todos", required=False, actio
 parser.add_argument("-d", "--done", help="mark a todo as done, needs the id", required=False)
 parser.add_argument("-r", "--remove", help="removes a todo from the list, needs the id", required=False)
 parser.add_argument("-x", "--reset", help="deletes all todos", required=False, action="store_true")
-parser.add_argument("-s", "--sort", help="sorts for completed or priority tasks", required=False,
-                    choices=["completed", "priority"])
+parser.add_argument("-s", "--sort", help="sorts for text/added/closed/priority tasks", required=False,
+                    choices=["text", "added", "closed", "priority"])
 parser.add_argument("-z", "--reshuffle_in_db", help="removes blanks in the id counting", required=False,
                     action="store_true")
 
